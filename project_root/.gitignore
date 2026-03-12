@@ -1,0 +1,18 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Project-specific exclusions
+Deploy/
+graph_explorer/dependency_data.json
+.DS_Store
+
+# IDE settings
+.vscode/
+.idea/
