@@ -46,6 +46,21 @@ def parse_dependencies():
             return module_registry[module_name]
         return None
 
+    def add_edge(src, target_mod, stmt):
+        resolved = resolve_module(target_mod)
+        if resolved:
+            if resolved == src: return
+            edges.append({
+                "source": src,
+                "target": resolved,
+                "type": "internal",
+                "import_statement": stmt
+            })
+        else:
+            if target_mod not in [n["id"] for n in nodes]:
+                nodes.append({"id": target_mod, "label": target_mod, "folder": None, "folder_index": -1, "type": "leaf"})
+            edges.append({"source": src, "target": target_mod, "type": "leaf", "import_statement": stmt})
+
     # 3. Process all files in the SCAN_ROOT
     for folder in all_folders:
         folder_name = os.path.basename(folder)
@@ -81,21 +96,6 @@ def parse_dependencies():
                             stmt = f"from {node.module} import {names}"
                             add_edge(file_path, node.module, stmt)
 
-    def add_edge(src, target_mod, stmt):
-        resolved = resolve_module(target_mod)
-        if resolved:
-            if resolved == src: return
-            edges.append({
-                "source": src,
-                "target": resolved,
-                "type": "internal",
-                "import_statement": stmt
-            })
-        else:
-            if target_mod not in [n["id"] for n in nodes]:
-                nodes.append({"id": target_mod, "label": target_mod, "folder": None, "folder_index": -1, "type": "leaf"})
-            edges.append({"source": src, "target": target_mod, "type": "leaf", "import_statement": stmt})
-
     # Save data
     unique_edges = []
     seen = set()
@@ -117,9 +117,6 @@ def parse_dependencies():
             "nodes": nodes,
             "edges": unique_edges
         }, f, indent=2)
-
-if __name__ == "__main__":
-    parse_dependencies()
 
 if __name__ == "__main__":
     parse_dependencies()
