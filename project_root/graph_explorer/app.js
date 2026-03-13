@@ -5,7 +5,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const UPLOAD_JSON = document.getElementById("upload-json");
     const NODE_DETAILS = document.getElementById("node-details");
     const BREADCRUMB = document.getElementById("breadcrumb");
-    const COLOR_LEGEND = document.getElementById("color-legend");
     const SVG = d3.select("#graph");
     
     let colorScale, allNodes, allEdges, metaData;
@@ -41,7 +40,6 @@ document.addEventListener("DOMContentLoaded", () => {
         colorScale = d3.scaleOrdinal(d3.schemeTableau10);
         meta.folders.forEach((folder, i) => colorScale(i));
 
-        buildLegend(meta.folders, colorScale);
         updateBreadcrumb();
         
         // Show blank state or search instruction
@@ -162,19 +160,6 @@ document.addEventListener("DOMContentLoaded", () => {
             .style("font-weight", d => d.depth === 0 ? "bold" : "normal");
 
         showNodeDetails(rootNode, allEdges);
-    }
-
-    function buildLegend(folders, colorScale) {
-        COLOR_LEGEND.innerHTML = "";
-        folders.forEach((folder, i) => {
-            const legendItem = document.createElement("div");
-            legendItem.style.marginBottom = "5px";
-            legendItem.innerHTML = `<span style="background-color: ${colorScale(i)}; width: 12px; height: 12px; display: inline-block; border-radius: 50%; border: 1px solid #333; vertical-align: middle; margin-right: 8px;"></span> ${folder}`;
-            COLOR_LEGEND.appendChild(legendItem);
-        });
-        const leafLegendItem = document.createElement("div");
-        leafLegendItem.innerHTML = `<span style="background-color: #eee; width: 12px; height: 12px; display: inline-block; border-radius: 50%; border: 1px solid #333; vertical-align: middle; margin-right: 8px;"></span> External Package`;
-        COLOR_LEGEND.appendChild(leafLegendItem);
     }
 
     function showNodeDetails(d, edges) {
