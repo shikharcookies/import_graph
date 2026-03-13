@@ -135,7 +135,7 @@ body {
 .legend {
     position: absolute;
     bottom: 20px;
-    left: 20px;
+    right: 20px;
     background-color: #f8f9fa;
     padding: 15px;
     border-radius: 8px;
@@ -144,6 +144,7 @@ body {
     max-height: 250px;
     overflow-y: auto;
     width: 200px;
+    z-index: 100;
 }
 
 .legend h3 {
