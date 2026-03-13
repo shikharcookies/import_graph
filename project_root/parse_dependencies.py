@@ -1,6 +1,7 @@
 import os
 import ast
 import json
+import warnings
 
 # MRFLEX Project Integration: Scan under 'Deploy/' folder
 # This will auto-discover the 20-30 folders you mentioned
@@ -71,8 +72,12 @@ def parse_dependencies():
                 file_path = os.path.join(root, file)
                 try:
                     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                        tree = ast.parse(f.read())
-                except:
+                        source_code = f.read()
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore")
+                            tree = ast.parse(source_code)
+                except Exception as e:
+                    # Optional: print(f"Skipping {file_path} due to error: {e}")
                     continue
 
                 nodes.append({
@@ -117,6 +122,10 @@ def parse_dependencies():
             "nodes": nodes,
             "edges": unique_edges
         }, f, indent=2)
+    
+    print(f"--- SUCCESS! ---")
+    print(f"Generated {OUTPUT_FILE}")
+    print(f"Scanned {len(all_folders)} folders and found {len(unique_edges)} dependencies.")
 
 if __name__ == "__main__":
     parse_dependencies()
