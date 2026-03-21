@@ -103,12 +103,28 @@ document.addEventListener("DOMContentLoaded", () => {
         const rootNode = allNodes.find(n => n.id === rootId);
         if (!rootNode) return;
 
+        // Get indirect dependencies for this file
+        const fileIndirect = indirectDeps[rootId] || [];
+
         // Find direct children (imports)
         const children = allEdges
             .filter(e => e.source === rootId)
             .map(e => {
                 const targetNode = allNodes.find(n => n.id === e.target);
-                return { ...targetNode, import_statement: e.import_statement };
+                const directLabel = targetNode.label.replace(".py", "");
+                
+                // Nest indirect usage for this specific module
+                const indirectForThisMod = fileIndirect
+                    .filter(chain => chain.startsWith(directLabel + "."))
+                    .map(chain => chain.substring(directLabel.length + 1));
+                
+                const indirectSubTree = buildIndirectTree(indirectForThisMod);
+
+                return { 
+                    ...targetNode, 
+                    import_statement: e.import_statement,
+                    children: indirectSubTree
+                };
             });
 
         const treeData = { ...rootNode, children };
@@ -118,8 +134,8 @@ document.addEventListener("DOMContentLoaded", () => {
         SVG.selectAll("*").remove();
 
         const root = d3.hierarchy(treeData);
-        // Single-level tree
-        const treeLayout = d3.tree().size([HEIGHT - 100, WIDTH - 400]);
+        // Multilevel tree layout
+        const treeLayout = d3.tree().size([HEIGHT - 100, WIDTH - 500]);
         treeLayout(root);
 
         const g = SVG.append("g").attr("transform", "translate(200, 50)");
@@ -152,8 +168,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
         node.append("circle")
             .attr("r", d => d.depth === 0 ? 15 : 10)
-            .attr("fill", d => d.data.folder_index !== -1 ? colorScale(d.data.folder_index) : "#eee")
-            .attr("stroke", "#333")
+            .attr("fill", d => {
+                if (d.data.type === "indirect") return "#fff";
+                return d.data.folder_index !== -1 ? colorScale(d.data.folder_index) : "#eee";
+            })
+            .attr("stroke", d => d.data.type === "indirect" ? "#888" : "#333")
+            .attr("stroke-dasharray", d => d.data.type === "indirect" ? "3,3" : "none")
             .attr("class", d => d.depth === 0 ? "glow" : "");
 
         node.append("text")
@@ -161,9 +181,37 @@ document.addEventListener("DOMContentLoaded", () => {
             .attr("x", d => d.children ? -15 : 15)
             .attr("y", 5)
             .attr("text-anchor", d => d.children ? "end" : "start")
-            .style("font-weight", d => d.depth === 0 ? "bold" : "normal");
+            .style("font-weight", d => d.depth === 0 ? "bold" : "normal")
+            .style("font-style", d => d.data.type === "indirect" ? "italic" : "normal")
+            .style("font-size", d => d.data.type === "indirect" ? "12px" : "14px");
 
         showNodeDetails(rootNode, allEdges);
+    }
+
+    function buildIndirectTree(chains) {
+        if (!chains || chains.length === 0) return null;
+        
+        const tree = {};
+        chains.forEach(chain => {
+            const parts = chain.split('.');
+            let currentLevel = tree;
+            parts.forEach(part => {
+                if (!currentLevel[part]) currentLevel[part] = {};
+                currentLevel = currentLevel[part];
+            });
+        });
+
+        function convert(obj, name) {
+            const children = Object.keys(obj).map(key => convert(obj[key], key));
+            return {
+                label: name,
+                type: "indirect",
+                children: children.length > 0 ? children : null,
+                folder_index: -1
+            };
+        }
+
+        return Object.keys(tree).map(key => convert(tree[key], key));
     }
 
     function showNodeDetails(d, edges) {
