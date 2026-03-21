@@ -10,6 +10,18 @@ FOCUS_FOLDER = "SPEScripts" # Primary folder for user entry
 OUTPUT_FILE = "graph_explorer/dependency_data.json"
 EXCLUDE_FOLDERS = [".venv", "__pycache__", ".git", "graph_explorer"]
 
+def get_full_attr(node):
+    """Recursive helper to extract full attribute chains like LibFactory.Manager.get"""
+    if isinstance(node, ast.Attribute):
+        val = get_full_attr(node.value)
+        if val:
+            return f"{val}.{node.attr}"
+    elif isinstance(node, ast.Name):
+        return node.id
+    elif isinstance(node, ast.Call):
+        return get_full_attr(node.func)
+    return None
+
 def parse_dependencies():
     # 1. Discover all folders under the scan root
     if not os.path.exists(SCAN_ROOT):
@@ -40,6 +52,7 @@ def parse_dependencies():
 
     nodes = []
     edges = []
+    indirect_dependencies = {}
     folder_colors = {os.path.basename(f): i for i, f in enumerate(all_folders)}
 
     def resolve_module(module_name):
@@ -89,17 +102,36 @@ def parse_dependencies():
                     "full_path": file_path
                 })
 
+                # Track direct imports to filter indirect chains
+                direct_imports = set()
+                file_indirect_deps = set()
+
                 for node in ast.walk(tree):
                     if isinstance(node, ast.Import):
                         for alias in node.names:
                             target = alias.name
+                            direct_imports.add(alias.asname or target)
                             stmt = f"import {alias.name}" + (f" as {alias.asname}" if alias.asname else "")
                             add_edge(file_path, target, stmt)
                     elif isinstance(node, ast.ImportFrom):
                         if node.module:
+                            for alias in node.names:
+                                direct_imports.add(alias.asname or alias.name)
                             names = ", ".join([a.name for a in node.names])
                             stmt = f"from {node.module} import {names}"
                             add_edge(file_path, node.module, stmt)
+                    
+                    # Capture Indirect Dependencies (Attribute Chains)
+                    elif isinstance(node, (ast.Attribute, ast.Call)):
+                        chain = get_full_attr(node)
+                        if chain:
+                            root_obj = chain.split('.')[0]
+                            # Only include if the root is a known direct import
+                            if root_obj in direct_imports:
+                                file_indirect_deps.add(chain)
+
+                if file_indirect_deps:
+                    indirect_dependencies[file_path] = sorted(list(file_indirect_deps))
 
     # Save data
     unique_edges = []
@@ -120,7 +152,8 @@ def parse_dependencies():
                 "total_edges": len(unique_edges)
             },
             "nodes": nodes,
-            "edges": unique_edges
+            "edges": unique_edges,
+            "indirect_dependencies": indirect_dependencies
         }, f, indent=2)
     
     print(f"--- SUCCESS! ---")

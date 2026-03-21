@@ -7,7 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const BREADCRUMB = document.getElementById("breadcrumb");
     const SVG = d3.select("#graph");
     
-    let colorScale, allNodes, allEdges, metaData;
+    let colorScale, allNodes, allEdges, metaData, indirectDeps;
     let navigationHistory = [];
 
     // Load default if available
@@ -28,10 +28,11 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     function initialize(data) {
-        const { meta, nodes, edges } = data;
+        const { meta, nodes, edges, indirect_dependencies } = data;
         allNodes = nodes;
         allEdges = edges;
         metaData = meta;
+        indirectDeps = indirect_dependencies || {};
         navigationHistory = [];
 
         FOLDER_COUNT.textContent = meta.folders.length;
@@ -165,6 +166,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function showNodeDetails(d, edges) {
         const imports = edges.filter(e => e.source === d.id);
         const importedBy = edges.filter(e => e.target === d.id);
+        const fileIndirect = indirectDeps[d.id] || [];
 
         NODE_DETAILS.innerHTML = `
             <div class="detail-card">
@@ -181,6 +183,12 @@ document.addEventListener("DOMContentLoaded", () => {
                         return `<li>${target.label} <br><small class="stmt">${i.import_statement}</small></li>`;
                     }).join("")}
                 </ul>
+                ${fileIndirect.length > 0 ? `
+                <hr>
+                <h4>Indirect Usage (${fileIndirect.length})</h4>
+                <ul class="detail-list">
+                    ${fileIndirect.map(chain => `<li><small class="stmt">${chain}</small></li>`).join("")}
+                </ul>` : ""}
                 <hr>
                 <h4>Imported By (${importedBy.length})</h4>
                 <ul class="detail-list">
