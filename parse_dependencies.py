@@ -2,12 +2,16 @@ import os
 import ast
 import json
 import warnings
+import sys
+import csv
+import pandas as pd
+import enrich_graph
 
-# MRFLEX Project Integration: Scan under 'Deploy/' folder
-# This will auto-discover the 20-30 folders you mentioned
-SCAN_ROOT = "Deploy" 
-FOCUS_FOLDER = "SPEScripts" # Primary folder for user entry
+# Configuration
+SCAN_ROOT = sys.argv[1] if len(sys.argv) > 1 else "Deploy"
+FOCUS_FOLDER = "SPEScripts"
 OUTPUT_FILE = "graph_explorer/dependency_data.json"
+CSV_OUTPUT = "graph_explorer/import_report.csv"
 EXCLUDE_FOLDERS = [".venv", "__pycache__", ".git", "graph_explorer"]
 
 def get_full_attr(node):
@@ -23,19 +27,35 @@ def get_full_attr(node):
     return None
 
 def parse_dependencies():
-    # 1. Discover all folders under the scan root
+    if os.path.isfile(SCAN_ROOT):
+        single_file = SCAN_ROOT
+        scan_root_dir = os.path.dirname(SCAN_ROOT)
+    else:
+        single_file = None
+        scan_root_dir = SCAN_ROOT
+
+    is_single_file = bool(single_file)
+
     if not os.path.exists(SCAN_ROOT):
-        print(f"Error: '{SCAN_ROOT}' folder not found. Please ensure you're in the MRFLEX root.")
+        print(f"Error: '{SCAN_ROOT}' folder not found. Please ensure you're in the MRFLEX root or pass full path.")
         return
 
-    all_folders = [os.path.join(SCAN_ROOT, d) for d in os.listdir(SCAN_ROOT) 
-                   if os.path.isdir(os.path.join(SCAN_ROOT, d)) and d not in EXCLUDE_FOLDERS]
-    
-    # 2. Build a registry for mapping module names to actual file paths
-    # We index files from ALL folders in 'Deploy/'
+    # Discover folders
+    if single_file:
+        all_folders = [scan_root_dir]
+    else:
+        all_folders = [os.path.join(SCAN_ROOT, d) for d in os.listdir(SCAN_ROOT)
+                       if os.path.isdir(os.path.join(SCAN_ROOT, d)) and d not in EXCLUDE_FOLDERS]
+
     module_registry = {}
+    
+    # Map modules to file paths
     for folder in all_folders:
         for root, _, files in os.walk(folder):
+            if single_file:
+                files = [os.path.basename(single_file)]
+                root = os.path.dirname(single_file)
+            
             for file in files:
                 if file.endswith(".py"):
                     file_path = os.path.join(root, file)
@@ -44,14 +64,14 @@ def parse_dependencies():
                     if SCAN_ROOT in full_mod:
                         full_mod = full_mod.split(f"{SCAN_ROOT}.")[1]
                     module_registry[full_mod] = file_path
-                    
-                    # Support 'import Module' (Flat style)
+
                     base_mod = os.path.splitext(file)[0]
                     if base_mod not in module_registry:
                         module_registry[base_mod] = file_path
 
     nodes = []
     edges = []
+    csv_rows = []
     indirect_dependencies = {}
     folder_colors = {os.path.basename(f): i for i, f in enumerate(all_folders)}
 
@@ -61,77 +81,105 @@ def parse_dependencies():
         return None
 
     def add_edge(src, target_mod, stmt):
-        resolved = resolve_module(target_mod)
-        if resolved:
-            if resolved == src: return
-            edges.append({
-                "source": src,
-                "target": resolved,
-                "type": "internal",
-                "import_statement": stmt
-            })
-        else:
-            if target_mod not in [n["id"] for n in nodes]:
-                nodes.append({"id": target_mod, "label": target_mod, "folder": None, "folder_index": -1, "type": "leaf"})
-            edges.append({"source": src, "target": target_mod, "type": "leaf", "import_statement": stmt})
-
-    # 3. Process all files in the SCAN_ROOT
-    for folder in all_folders:
-        folder_name = os.path.basename(folder)
-        for root, _, files in os.walk(folder):
-            for file in files:
-                if not file.endswith(".py"): continue
+        file_name = os.path.basename(src)
+        
+        if not is_single_file:
+            resolved = resolve_module(target_mod)
+            if resolved:
+                if resolved == src:
+                    return
                 
-                file_path = os.path.join(root, file)
-                try:
-                    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                        source_code = f.read()
-                        with warnings.catch_warnings():
-                            warnings.simplefilter("ignore")
-                            tree = ast.parse(source_code)
-                except Exception as e:
-                    # Optional: print(f"Skipping {file_path} due to error: {e}")
-                    continue
-
-                nodes.append({
-                    "id": file_path,
-                    "label": file,
-                    "folder": folder_name,
-                    "folder_index": folder_colors.get(folder_name, -1),
+                edges.append({
+                    "source": src,
+                    "target": resolved,
                     "type": "internal",
-                    "full_path": file_path
+                    "import_statement": stmt
                 })
+                csv_rows.append([file_name, target_mod, stmt, "internal"])
+                return
 
-                # Track direct imports to filter indirect chains
-                direct_imports = set()
-                file_indirect_deps = set()
+        # If not resolved or target_mod not in nodes, treat as external/leaf
+        if target_mod not in [n["id"] for n in nodes]:
+            nodes.append({
+                "id": target_mod,
+                "label": target_mod,
+                "folder": None,
+                "folder_index": -1,
+                "type": "leaf"
+            })
+        
+        edges.append({
+            "source": src,
+            "target": target_mod,
+            "type": "leaf",
+            "import_statement": stmt
+        })
+        csv_rows.append([file_name, target_mod, stmt, "external"])
 
-                for node in ast.walk(tree):
-                    if isinstance(node, ast.Import):
+    # Collect files to scan
+    files_to_scan = []
+    if single_file:
+        files_to_scan.append(single_file)
+    else:
+        for folder in all_folders:
+            for root, _, files in os.walk(folder):
+                for file in files:
+                    if file.endswith(".py"):
+                        files_to_scan.append(os.path.join(root, file))
+
+    # Parse each file
+    for file_path in files_to_scan:
+        file_name = os.path.basename(file_path)
+        folder_name = os.path.basename(os.path.dirname(file_path))
+        
+        nodes.append({
+            "id": file_path,
+            "label": file_name,
+            "folder": folder_name,
+            "folder_index": folder_colors.get(folder_name, -1),
+            "type": "internal",
+            "full_path": file_path
+        })
+
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                source_code = f.read()
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    tree = ast.parse(source_code)
+            
+            # Track direct imports to filter indirect chains
+            direct_imports = set()
+            file_indirect_deps = set()
+
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        target = alias.name
+                        direct_imports.add(alias.asname or target)
+                        stmt = f"import {alias.name}" + (f" as {alias.asname}" if alias.asname else "")
+                        add_edge(file_path, target, stmt)
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module:
                         for alias in node.names:
-                            target = alias.name
-                            direct_imports.add(alias.asname or target)
-                            stmt = f"import {alias.name}" + (f" as {alias.asname}" if alias.asname else "")
-                            add_edge(file_path, target, stmt)
-                    elif isinstance(node, ast.ImportFrom):
-                        if node.module:
-                            for alias in node.names:
-                                direct_imports.add(alias.asname or alias.name)
-                            names = ", ".join([a.name for a in node.names])
-                            stmt = f"from {node.module} import {names}"
-                            add_edge(file_path, node.module, stmt)
-                    
-                    # Capture Indirect Dependencies (Attribute Chains)
-                    elif isinstance(node, (ast.Attribute, ast.Call)):
-                        chain = get_full_attr(node)
-                        if chain:
-                            root_obj = chain.split('.')[0]
-                            # Only include if the root is a known direct import
-                            if root_obj in direct_imports:
-                                file_indirect_deps.add(chain)
+                            direct_imports.add(alias.asname or alias.name)
+                        names = ", ".join([a.name for a in node.names])
+                        stmt = f"from {node.module} import {names}"
+                        add_edge(file_path, node.module, stmt)
+                
+                # Capture Indirect Dependencies (Attribute Chains)
+                elif isinstance(node, (ast.Attribute, ast.Call)):
+                    chain = get_full_attr(node)
+                    if chain:
+                        root_obj = chain.split('.')[0]
+                        # Only include if the root is a known direct import
+                        if root_obj in direct_imports:
+                            file_indirect_deps.add(chain)
 
-                if file_indirect_deps:
-                    indirect_dependencies[file_path] = sorted(list(file_indirect_deps))
+            if file_indirect_deps:
+                indirect_dependencies[file_path] = sorted(list(file_indirect_deps))
+        except Exception:
+            continue
 
     # Save data
     unique_edges = []
@@ -143,6 +191,7 @@ def parse_dependencies():
             seen.add(eid)
 
     os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
+
     with open(OUTPUT_FILE, "w") as f:
         json.dump({
             "meta": {
@@ -155,10 +204,34 @@ def parse_dependencies():
             "edges": unique_edges,
             "indirect_dependencies": indirect_dependencies
         }, f, indent=2)
-    
+
+    with open(CSV_OUTPUT, "w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["file", "imported_module", "import_statement", "type"])
+        writer.writerows(csv_rows)
+
     print(f"--- SUCCESS! ---")
     print(f"Generated {OUTPUT_FILE}")
+    print(f"Generated {CSV_OUTPUT}")
     print(f"Scanned {len(all_folders)} folders and found {len(unique_edges)} dependencies.")
+
+def modify_json(df):
+    grouped = (
+        df.groupby("file")
+        .apply(lambda g: g[["imported_module", "import_statement", "type"]]
+               .to_dict(orient="records"))
+        .to_dict()
+    )
+    
+    json_str = json.dumps(grouped, indent=2)
+    with open("graph_explorer/import_report.json", "w") as f:
+        f.write(json_str)
 
 if __name__ == "__main__":
     parse_dependencies()
+    
+    if os.path.exists(CSV_OUTPUT):
+        df = pd.read_csv(CSV_OUTPUT)
+        print(df.head(7))
+        modify_json(df)
+        enrich_graph.main()

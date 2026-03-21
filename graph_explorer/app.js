@@ -168,6 +168,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const importedBy = edges.filter(e => e.target === d.id);
         const fileIndirect = indirectDeps[d.id] || [];
 
+        const meta = {
+            committer: d.committer,
+            date: d.commit_date,
+            jira: d.jira_number
+        };
+
         NODE_DETAILS.innerHTML = `
             <div class="detail-card">
                 <h2 style="color: ${d.folder_index !== -1 ? colorScale(d.folder_index) : '#666'}">${d.label}</h2>
@@ -175,6 +181,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 <p><strong>Type:</strong> <span class="badge ${d.type}">${d.type}</span></p>
                 ${d.folder ? `<p><strong>Folder:</strong> ${d.folder}</p>` : ""}
                 ${d.full_path ? `<p><strong>Path:</strong> <small>${d.full_path}</small></p>` : ""}
+                ${meta.committer || meta.date || meta.jira ? `<hr>
+                <h4>Bitbucket info</h4>
+                <ul class="detail-list">
+                ${meta.committer ? `<p><strong>Committer:</strong> ${meta.committer}</p>` : ""}
+                ${meta.date ? `<p><strong>Date:</strong> ${meta.date}</p>` : ""}
+                ${meta.jira ? `<p><strong>JIRA:</strong> ${meta.jira}</p>` : ""}
+                </ul>
+                `: ""}
                 <hr>
                 <h4>Direct Imports (${imports.length})</h4>
                 <ul class="detail-list">
@@ -201,3 +215,4 @@ document.addEventListener("DOMContentLoaded", () => {
         `;
     }
 });
+
