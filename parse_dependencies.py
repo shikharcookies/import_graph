@@ -14,7 +14,7 @@ STDLIB_MODULES = getattr(sys, "stdlib_module_names", set()) | set(sys.builtin_mo
 
 # Configuration
 SCAN_ROOT = sys.argv[1] if len(sys.argv) > 1 else "Deploy"
-FOCUS_FOLDER = "SPEScripts"
+FOCUS_FOLDER = sys.argv[2] if len(sys.argv) > 2 else "SPEScripts"
 OUTPUT_FILE = "graph_explorer/dependency_data.json"
 CSV_OUTPUT = "graph_explorer/import_report.csv"
 EXCLUDE_FOLDERS = [".venv", "__pycache__", ".git", "graph_explorer"]
@@ -139,13 +139,19 @@ def parse_dependencies():
     # Parse each file
     for file_path in files_to_scan:
         file_name = os.path.basename(file_path)
-        folder_name = os.path.basename(os.path.dirname(file_path))
+        
+        # Determine the top-level folder name under SCAN_ROOT for coloring
+        rel_path = os.path.relpath(file_path, SCAN_ROOT)
+        top_folder_name = rel_path.split(os.sep)[0]
+        
+        # For the display label, we use the immediate parent folder
+        immediate_folder = os.path.basename(os.path.dirname(file_path))
         
         nodes.append({
             "id": file_path,
             "label": file_name,
-            "folder": folder_name,
-            "folder_index": folder_colors.get(folder_name, -1),
+            "folder": immediate_folder,
+            "folder_index": folder_colors.get(top_folder_name, -1),
             "type": "internal",
             "full_path": file_path
         })
@@ -207,7 +213,8 @@ def parse_dependencies():
                 "folders": [os.path.basename(f) for f in all_folders],
                 "folder_colors": folder_colors,
                 "total_files": len([n for n in nodes if n["type"] == "internal"]),
-                "total_edges": len(unique_edges)
+                "total_edges": len(unique_edges),
+                "focus_folder": FOCUS_FOLDER
             },
             "nodes": nodes,
             "edges": unique_edges,

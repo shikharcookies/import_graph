@@ -16,13 +16,16 @@ To use this tool within your MRFLEX project, follow these steps:
   ```
 
 ## 2. Generating Data
-
 - Open your terminal in the MRFLEX root.
-- Run the parser:
+- Run the parser with optional arguments:
   ```bash
+  # Default (Scans 'Deploy' folder, focuses on 'SPEScripts')
   python3 parse_dependencies.py
+  
+  # Custom (Scans 'Deploy' folder, focuses on 'SPESmartDeals')
+  python3 parse_dependencies.py Deploy SPESmartDeals
   ```
-- This will scan all subfolders under `Deploy/` and generate the dependency map in `graph_explorer/dependency_data.json`.
+- This will scan all subfolders under the specified root and generate the dependency map in `graph_explorer/dependency_data.json`.
 
 ## 3. Using the Visualizer
 

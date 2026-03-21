@@ -43,6 +43,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
         updateBreadcrumb();
         
+        const focusText = metaData.focus_folder || "SPEScripts";
+        SEARCH_BOX.placeholder = `Search for a file in ${focusText}...`;
+        
         // Show blank state or search instruction
         SVG.selectAll("*").remove();
         SVG.append("text")
@@ -50,7 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
             .attr("y", "50%")
             .attr("text-anchor", "middle")
             .attr("fill", "#888")
-            .text("Search for a file (e.g., abc.py) to start exploring");
+            .text(`Search for a file in ${focusText} to start exploring`);
     }
 
     SEARCH_BOX.addEventListener("keypress", (e) => {
