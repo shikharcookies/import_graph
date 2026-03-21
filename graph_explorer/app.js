@@ -64,6 +64,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 n.id.toLowerCase().includes(searchTerm)
             );
             if (matchingNode) {
+                // NEW SEARCH: Reset history so we start fresh from this script
+                navigationHistory = [];
                 navigateTo(matchingNode.id);
             } else {
                 alert("File not found. Try 'abc.py'");
