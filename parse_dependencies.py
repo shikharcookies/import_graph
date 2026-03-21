@@ -7,6 +7,11 @@ import csv
 import pandas as pd
 import enrich_graph
 
+
+# Programmatically get all Python standard library and built-in module names
+# This requires Python 3.10+; for older versions, it defaults to builtin names
+STDLIB_MODULES = getattr(sys, "stdlib_module_names", set()) | set(sys.builtin_module_names)
+
 # Configuration
 SCAN_ROOT = sys.argv[1] if len(sys.argv) > 1 else "Deploy"
 FOCUS_FOLDER = "SPEScripts"
@@ -81,6 +86,10 @@ def parse_dependencies():
         return None
 
     def add_edge(src, target_mod, stmt):
+        # FILTER: Skip standard library and built-in modules
+        if target_mod in STDLIB_MODULES:
+            return
+
         file_name = os.path.basename(src)
         
         if not is_single_file:
@@ -172,8 +181,8 @@ def parse_dependencies():
                     chain = get_full_attr(node)
                     if chain:
                         root_obj = chain.split('.')[0]
-                        # Only include if the root is a known direct import
-                        if root_obj in direct_imports:
+                        # Only include if the root is a known direct import AND NOT a built-in
+                        if root_obj in direct_imports and root_obj not in STDLIB_MODULES:
                             file_indirect_deps.add(chain)
 
             if file_indirect_deps:
@@ -235,3 +244,4 @@ if __name__ == "__main__":
         print(df.head(7))
         modify_json(df)
         enrich_graph.main()
+        
