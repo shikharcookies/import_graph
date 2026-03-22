@@ -1,19 +1,26 @@
 import os
 import sys
-import pandas as pd
-import ast
 
 # Import our custom modules
-from config import SCAN_ROOT, FOCUS_FOLDER, EXCLUDE_FOLDERS, STDLIB_MODULES
-from ast_analyzer import analyze_file
+from ast_parser import analyze_file
 from dependency_resolver import Resolver
-from exporter import save_json, save_csv, generate_report_json
+from graph_builder import save_json, save_toon, save_csv, generate_report_json
 
-# Try to load enrich_graph if it exists
-try:
-    import enrich_graph
-except ImportError:
-    enrich_graph = None
+# Programmatically get all Python standard library and built-in module names
+STDLIB_MODULES = getattr(sys, "stdlib_module_names", set()) | set(sys.builtin_module_names)
+
+# CLI Configuration
+SCAN_ROOT = sys.argv[1] if len(sys.argv) > 1 else "Deploy"
+FOCUS_FOLDER = sys.argv[2] if len(sys.argv) > 2 else "SPEScripts"
+
+# Paths
+OUTPUT_FILE = "graph_explorer/dependency_data.json"
+TOON_OUTPUT = "graph_explorer/dependency_data.toon"
+CSV_OUTPUT = "graph_explorer/import_report.csv"
+REPORT_JSON = "graph_explorer/import_report.json"
+
+# Exclusions
+EXCLUDE_FOLDERS = [".venv", "__pycache__", ".git", "graph_explorer"]
 
 def run_pipeline():
     # 1. Initialization
@@ -32,7 +39,7 @@ def run_pipeline():
                        if os.path.isdir(os.path.join(SCAN_ROOT, d)) and d not in EXCLUDE_FOLDERS]
 
     # 2. Setup Resolver
-    resolver = Resolver(all_folders, single_file)
+    resolver = Resolver(all_folders, SCAN_ROOT, STDLIB_MODULES, single_file)
     folder_colors = {os.path.basename(f): i for i, f in enumerate(all_folders)}
 
     nodes = []
@@ -100,18 +107,27 @@ def run_pipeline():
         "focus_folder": FOCUS_FOLDER
     }
 
-    save_json(meta, nodes, edges, indirect_dependencies)
-    save_csv(csv_rows)
+    # Save JSON (Regular and Minified)
+    save_json(OUTPUT_FILE, meta, nodes, edges, indirect_dependencies, minify=False)
+    
+    # Save TOON (Space Saving)
+    save_toon(TOON_OUTPUT, {
+        "meta": meta,
+        "nodes": nodes,
+        "edges": edges,
+        "indirect_dependencies": indirect_dependencies
+    })
+    
+    save_csv(CSV_OUTPUT, csv_rows)
 
     print(f"--- SUCCESS! ---")
     print(f"Scanned {len(all_folders)} folders and found {len(edges)} dependencies.")
+    print(f"Output saved to {OUTPUT_FILE} and {TOON_OUTPUT}")
 
     # Generate additional reports
-    df = generate_report_json()
+    df = generate_report_json(CSV_OUTPUT, REPORT_JSON)
     if df is not None:
         print(df.head(7))
-        if enrich_graph:
-            enrich_graph.main()
 
 def add_edge(src, target, stmt, edge_type, nodes, edges, seen_edges, csv_rows):
     eid = f"{src}->{target}"

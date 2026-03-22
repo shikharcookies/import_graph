@@ -10,22 +10,112 @@ document.addEventListener("DOMContentLoaded", () => {
     let colorScale, allNodes, allEdges, metaData, indirectDeps;
     let navigationHistory = [];
 
-    // Load default if available
-    fetch("dependency_data.json")
-        .then(response => response.json())
-        .then(data => initialize(data))
-        .catch(err => console.log("No default JSON found. Please upload one."));
+    // Load default if available (try toon first for efficiency, fallback to json)
+    fetch("dependency_data.toon")
+        .then(response => response.text())
+        .then(text => {
+            const data = decodeToon(text);
+            initialize(data);
+        })
+        .catch(() => {
+            fetch("dependency_data.json")
+                .then(response => response.json())
+                .then(data => initialize(data))
+                .catch(err => console.log("No default data found. Please upload one."));
+        });
 
     UPLOAD_JSON.addEventListener("change", (event) => {
         const file = event.target.files[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = (e) => {
-            const data = JSON.parse(e.target.result);
+            let data;
+            if (file.name.endsWith(".toon")) {
+                data = decodeToon(e.target.result);
+            } else {
+                data = JSON.parse(e.target.result);
+            }
             initialize(data);
         };
         reader.readAsText(file);
     });
+
+    function decodeToon(text) {
+        const lines = text.split('\n');
+        let i = 0;
+
+        function parse(currentIndent) {
+            let obj = null;
+            let isList = false;
+
+            while (i < lines.length) {
+                const line = lines[i];
+                if (!line.trim()) { i++; continue; }
+                
+                const indent = line.search(/\S/);
+                if (indent < currentIndent) break;
+
+                const content = line.trim();
+
+                // Check for tabular array header: [count,]{keys}:
+                const tabMatch = content.match(/^\[(\d+),\]\{(.*)\}:$/);
+                if (tabMatch) {
+                    const count = parseInt(tabMatch[1]);
+                    const keys = tabMatch[2].split(',');
+                    const rows = [];
+                    i++;
+                    while (i < lines.length && (lines[i].trim() === '' || lines[i].search(/\S/) > indent)) {
+                        const rowText = lines[i].trim();
+                        if (rowText) {
+                            // Robust CSV parse using JSON.parse since each value was json.dumps'd
+                            const rowValues = JSON.parse('[' + rowText + ']');
+                            const rowObj = {};
+                            keys.forEach((k, idx) => rowObj[k] = rowValues[idx]);
+                            rows.push(rowObj); 
+                        }
+                        i++;
+                    }
+                    return rows;
+                }
+
+                // Check for list item
+                if (content.startsWith("-")) {
+                    if (obj === null) { obj = []; isList = true; }
+                    const valStr = content.substring(1).trim();
+                    if (valStr) {
+                        try { obj.push(JSON.parse(valStr)); } catch(e) { obj.push(valStr); }
+                        i++;
+                    } else {
+                        i++;
+                        obj.push(parse(indent + 1));
+                    }
+                    continue;
+                }
+
+                // Check for dict key
+                const colonIdx = content.indexOf(':');
+                if (colonIdx !== -1) {
+                    if (obj === null) { obj = {}; isList = false; }
+                    const key = content.substring(0, colonIdx).trim();
+                    const valStr = content.substring(colonIdx + 1).trim();
+                    
+                    if (valStr) {
+                        try { obj[key] = JSON.parse(valStr); } catch(e) { obj[key] = valStr; }
+                        i++;
+                    } else {
+                        i++;
+                        obj[key] = parse(indent + 1);
+                    }
+                } else {
+                    // Primitive value
+                    try { return JSON.parse(content); } catch(e) { return content; }
+                }
+            }
+            return obj;
+        }
+
+        return parse(0);
+    }
 
     function initialize(data) {
         const { meta, nodes, edges, indirect_dependencies } = data;
@@ -61,14 +151,16 @@ document.addEventListener("DOMContentLoaded", () => {
             const searchTerm = SEARCH_BOX.value.trim().toLowerCase();
             const matchingNode = allNodes.find(n => 
                 n.label.toLowerCase() === searchTerm || 
-                n.id.toLowerCase().includes(searchTerm)
+                n.id.toLowerCase().includes(searchTerm) ||
+                n.id.toLowerCase().endsWith(searchTerm)
             );
             if (matchingNode) {
                 // NEW SEARCH: Reset history so we start fresh from this script
                 navigationHistory = [];
                 navigateTo(matchingNode.id);
+                SEARCH_BOX.value = ""; // Clear box after search
             } else {
-                alert("File not found. Try 'abc.py'");
+                alert("File not found. Try searching for a filename like 'abc.py'");
             }
         }
     });

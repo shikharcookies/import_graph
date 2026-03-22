@@ -1,0 +1,3 @@
+file,imported_module,import_statement,type
+moduleA.py,test_project/FolderB/moduleB.py,import FolderB.moduleB,internal
+main.py,test_project/FolderB/moduleB.py,from FolderB.moduleB import ClassB,internal

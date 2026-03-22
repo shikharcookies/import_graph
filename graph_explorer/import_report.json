@@ -1,0 +1,16 @@
+{
+  "main.py": [
+    {
+      "imported_module": "test_project/FolderB/moduleB.py",
+      "import_statement": "from FolderB.moduleB import ClassB",
+      "type": "internal"
+    }
+  ],
+  "moduleA.py": [
+    {
+      "imported_module": "test_project/FolderB/moduleB.py",
+      "import_statement": "import FolderB.moduleB",
+      "type": "internal"
+    }
+  ]
+}

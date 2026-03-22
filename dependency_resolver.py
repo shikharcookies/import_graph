@@ -1,13 +1,12 @@
 import os
 import sys
 
-# Programs use config directly
-from config import STDLIB_MODULES, SCAN_ROOT
-
 class Resolver:
-    def __init__(self, all_folders, single_file=None):
+    def __init__(self, all_folders, scan_root, stdlib_modules, single_file=None):
         self.module_registry = {}
         self.all_folders = all_folders
+        self.scan_root = scan_root
+        self.stdlib_modules = stdlib_modules
         self.single_file = single_file
         self.build_registry()
 
@@ -24,8 +23,12 @@ class Resolver:
                         file_path = os.path.join(root, file)
                         # Support 'import Folder.Module'
                         full_mod = file_path.replace(os.sep, ".").replace(".py", "")
-                        if SCAN_ROOT in full_mod:
-                            full_mod = full_mod.split(f"{SCAN_ROOT}.")[1]
+                        if self.scan_root in full_mod:
+                            try:
+                                full_mod = full_mod.split(f"{self.scan_root}.")[1]
+                            except IndexError:
+                                # In case scan_root is exactly the file path
+                                pass
                         self.module_registry[full_mod] = file_path
 
                         base_mod = os.path.splitext(file)[0]
@@ -36,4 +39,4 @@ class Resolver:
         return self.module_registry.get(module_name)
 
     def is_stdlib(self, module_name):
-        return module_name in STDLIB_MODULES
+        return module_name in self.stdlib_modules

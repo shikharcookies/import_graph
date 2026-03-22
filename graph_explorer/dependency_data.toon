@@ -1,0 +1,22 @@
+meta:
+  folders:
+    - "FolderB"
+    - "FolderA"
+  folder_colors:
+    FolderB: 0
+    FolderA: 1
+  total_files: 3
+  total_edges: 2
+  focus_folder: "FolderA"
+nodes:
+  [3,]{id,label,folder,folder_index,type,full_path}:
+    "test_project/FolderB/moduleB.py","moduleB.py","FolderB",0,"internal","test_project/FolderB/moduleB.py"
+    "test_project/FolderA/moduleA.py","moduleA.py","FolderA",1,"internal","test_project/FolderA/moduleA.py"
+    "test_project/FolderA/main.py","main.py","FolderA",1,"internal","test_project/FolderA/main.py"
+edges:
+  [2,]{source,target,type,import_statement}:
+    "test_project/FolderA/moduleA.py","test_project/FolderB/moduleB.py","internal","import FolderB.moduleB"
+    "test_project/FolderA/main.py","test_project/FolderB/moduleB.py","internal","from FolderB.moduleB import ClassB"
+indirect_dependencies:
+  test_project/FolderA/main.py:
+    - "ClassB"
