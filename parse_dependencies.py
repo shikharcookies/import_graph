@@ -6,6 +6,12 @@ from ast_parser import analyze_file
 from dependency_resolver import Resolver
 from graph_builder import save_json, save_toon, save_csv, generate_report_json
 
+# Try to load enrich_graph if it exists
+try:
+    import enrich_graph
+except ImportError:
+    enrich_graph = None
+
 # Programmatically get all Python standard library and built-in module names
 STDLIB_MODULES = getattr(sys, "stdlib_module_names", set()) | set(sys.builtin_module_names)
 
@@ -128,6 +134,8 @@ def run_pipeline():
     df = generate_report_json(CSV_OUTPUT, REPORT_JSON)
     if df is not None:
         print(df.head(7))
+        if enrich_graph:
+            enrich_graph.main()
 
 def add_edge(src, target, stmt, edge_type, nodes, edges, seen_edges, csv_rows):
     eid = f"{src}->{target}"
